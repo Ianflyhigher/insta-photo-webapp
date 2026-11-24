@@ -1,0 +1,836 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>인스타 사진 다운로더</title>
+<style>
+  :root{
+    --bg:#f4f5f8; --card:#fff; --ink:#171a20; --muted:#6b7280; --line:#e6e8ee;
+    --accent:#e1306c; --accent2:#7b5cff; --ok:#0f9d58; --warn:#b45309; --danger:#d92d20;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);line-height:1.5;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",Roboto,"Noto Sans KR",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding:0 14px calc(96px + env(safe-area-inset-bottom));
+  }
+  header{padding:24px 2px 12px;max-width:860px;margin:0 auto}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;
+    color:#a0224f;background:#fde8f1;padding:5px 10px;border-radius:999px;margin-bottom:10px}
+  h1{margin:0;font-size:24px;letter-spacing:-.02em;font-weight:800}
+  h1 .grad{background:linear-gradient(120deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{margin:6px 0 0;color:var(--muted);font-size:13.5px}
+  main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--card);border-radius:var(--radius);padding:18px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04),0 12px 28px -18px rgba(16,24,40,.25);
+    border:1px solid rgba(16,24,40,.04)}
+  .card h2{margin:0 0 12px;font-size:15px;font-weight:700;letter-spacing:-.01em}
+  label.blk{display:block;font-size:13px;font-weight:700;color:#374151;margin:0 0 7px}
+  .field{position:relative;display:flex;align-items:center;margin-bottom:14px}
+  .field .at{position:absolute;left:14px;color:var(--muted);font-size:17px;font-weight:600}
+  input[type=text],input[type=password],textarea{
+    width:100%;padding:14px 14px 14px 32px;font-size:16px;font-family:inherit;
+    border:1.5px solid var(--line);border-radius:13px;background:#fafbfc;color:var(--ink);outline:none;
+    transition:border-color .15s,background .15s}
+  textarea{padding:12px;font-size:14px;min-height:74px;resize:vertical}
+  input:focus,textarea:focus{border-color:var(--accent2);background:#fff;box-shadow:0 0 0 3px rgba(123,92,255,.12)}
+  button.primary,.btn-primary{
+    display:block;width:100%;padding:15px;border:0;border-radius:14px;font-size:16px;font-weight:800;
+    font-family:inherit;color:#fff;cursor:pointer;text-align:center;text-decoration:none;
+    background:linear-gradient(120deg,var(--accent),var(--accent2));
+    box-shadow:0 10px 22px -12px rgba(225,48,108,.8);-webkit-tap-highlight-color:transparent;
+    transition:transform .1s,filter .15s}
+  button.primary:active,.btn-primary:active{transform:scale(.99)}
+  button.primary[disabled]{filter:grayscale(.7);opacity:.6;box-shadow:none;cursor:default}
+  button.ghost{padding:11px 14px;border-radius:12px;border:1.5px solid var(--line);background:#fff;
+    font-family:inherit;font-size:13.5px;font-weight:700;color:#374151;cursor:pointer}
+  button.small{padding:8px 11px;border-radius:10px;border:1.5px solid var(--line);background:#fff;
+    font-family:inherit;font-size:12.5px;font-weight:700;color:#374151;cursor:pointer}
+  .hint{margin:10px 0 0;font-size:12.5px;color:var(--muted);line-height:1.55}
+  .row{display:flex;gap:8px;align-items:center}
+  .row.wrap{flex-wrap:wrap}
+  .grow{flex:1;min-width:0}
+  .hidden{display:none!important}
+  /* 프로필 */
+  .prof{display:flex;align-items:center;gap:12px}
+  .prof img{width:54px;height:54px;border-radius:50%;object-fit:cover;background:#eef0f5;
+    border:2px solid #fff;box-shadow:0 0 0 2px #f1e6ef;flex:0 0 auto}
+  .prof strong{display:block;font-size:15.5px}
+  .prof span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px}
+  /* 목록 도구 */
+  .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 4px;
+    padding-top:14px;border-top:1px solid var(--line)}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;
+    padding:8px 11px;border-radius:999px;border:1.5px solid var(--line);background:#fff;
+    color:#374151;cursor:pointer;user-select:none}
+  .chip.on{background:#f7f5ff;border-color:#d8d2ff;color:#5b3ee6}
+  .chip input{accent-color:#5b3ee6}
+  .count{margin-left:auto;font-size:12.5px;color:var(--muted)}
+  /* 사진 타일 */
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+  .tile{background:#fff;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;
+    display:flex;flex-direction:column;position:relative;transition:border-color .15s,box-shadow .15s}
+  .tile.sel{border-color:var(--accent2);box-shadow:0 0 0 3px rgba(123,92,255,.13)}
+  .tile.done{opacity:.62}
+  .tile.done .thumb img{filter:grayscale(.15)}
+  .thumb{position:relative;aspect-ratio:1/1;background:#eef0f5;cursor:zoom-in}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .thumb .noimg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:12px;color:#8b93a1;text-align:center;padding:8px;line-height:1.4}
+  .pick{position:absolute;right:8px;top:8px;width:30px;height:30px;border-radius:50%;
+    background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;
+    box-shadow:0 1px 4px rgba(0,0,0,.18);cursor:pointer}
+  .pick input{width:18px;height:18px;accent-color:#7b5cff;cursor:pointer}
+  .flag{position:absolute;left:8px;top:8px;font-size:11px;font-weight:800;padding:4px 8px;border-radius:999px;
+    background:rgba(15,157,88,.94);color:#fff;letter-spacing:-.01em}
+  .flag.multi{background:rgba(23,26,32,.78)}
+  .info{padding:9px 10px 2px}
+  .info .date{font-size:11.5px;color:var(--muted);font-weight:600}
+  .info .cap{margin:3px 0 0;font-size:12px;color:#3f4654;display:-webkit-box;
+    -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.6em;word-break:break-all}
+  .tile .acts{display:flex;gap:6px;padding:8px 10px 10px}
+  .tile .acts a{flex:1;text-align:center;font-size:12px;font-weight:700;text-decoration:none;
+    padding:8px 4px;border-radius:9px;background:#f5f6f9;color:#3f4656}
+  .tile .acts a.origin{background:#f7f5ff;color:#5b3ee6}
+  /* 더 보기 */
+  .more-wrap{margin-top:14px}
+  .spinner{display:inline-block;width:15px;height:15px;border:2px solid #d8d2ff;border-top-color:#5b3ee6;
+    border-radius:50%;animation:spin .8s linear infinite;vertical-align:-3px;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* 진행 */
+  .bar{height:8px;border-radius:999px;background:#eef0f5;overflow:hidden}
+  .bar i{display:block;height:100%;width:0%;border-radius:999px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s ease}
+  .bar.indet i{width:35%!important;animation:slide 1.2s ease-in-out infinite}
+  @keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+  .progress .row{margin-bottom:9px;font-size:13.5px;font-weight:700}
+  .progress .row span:last-child{color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+  /* 오류 */
+  .error{border-color:#fbd5d5;background:#fff8f8}
+  .error strong{display:block;font-size:15px;color:var(--danger);margin-bottom:6px}
+  .error p{margin:0 0 4px;font-size:13.5px;color:#7f1d1d}
+  .error .hint{color:#9b4a4a}
+  /* 결과 */
+  .files{margin-top:12px;border-top:1px solid var(--line)}
+  .files a{display:flex;justify-content:space-between;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line);
+    font-size:12.5px;color:#3f4656;text-decoration:none}
+  .files a span:last-child{color:var(--muted);flex:0 0 auto}
+  /* 계정 목록 */
+  .acct{display:flex;align-items:center;gap:10px;padding:11px 0;border-top:1px solid var(--line)}
+  .acct:first-child{border-top:0;padding-top:2px}
+  .acct .who{flex:1;min-width:0}
+  .acct .who b{display:block;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .acct .who span{font-size:12px;color:var(--muted)}
+  .mini{flex:0 0 auto;font-size:12.5px;font-weight:700;text-decoration:none;padding:8px 11px;
+    border-radius:10px;border:1.5px solid var(--line);color:#374151;background:#fff;cursor:pointer}
+  .mini.zip{border-color:#d8d2ff;color:#5b3ee6;background:#f7f5ff}
+  .empty{font-size:13px;color:var(--muted);margin:0}
+  .note{font-size:12.5px;color:var(--warn);background:#fffbeb;border:1px solid #fde68a;
+    border-radius:10px;padding:9px 11px;margin-top:12px}
+  /* 설정 */
+  details summary{cursor:pointer;font-size:14px;font-weight:700;color:#374151;list-style:none}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"＋ ";color:var(--accent2);font-weight:800}
+  details[open] summary::before{content:"－ "}
+  details .body{margin-top:12px;font-size:13px;color:#374151;line-height:1.7}
+  code.inline{display:inline-block;background:#f3f4f8;border-radius:6px;padding:2px 7px;
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12.5px;color:#3f3f6e}
+  pre{background:#f7f7fb;border:1px solid var(--line);border-radius:10px;padding:11px;overflow-x:auto;
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.6;margin:8px 0}
+  .state{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:10px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#c9ced8;flex:0 0 auto}
+  .dot.on{background:var(--ok)}
+  /* 하단 선택 바 */
+  .selbar{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);
+    transform:translateY(120%);transition:transform .22s ease}
+  .selbar.show{transform:translateY(0)}
+  .selbar .inner{max-width:860px;margin:0 auto;display:flex;gap:8px;align-items:center}
+  .selbar .num{font-size:13px;font-weight:800;white-space:nowrap}
+  .selbar button.go{flex:1;padding:13px;border:0;border-radius:12px;color:#fff;font-family:inherit;
+    font-size:14.5px;font-weight:800;background:linear-gradient(120deg,var(--accent),var(--accent2));cursor:pointer}
+  .selbar button.go[disabled]{filter:grayscale(.7);opacity:.6}
+  /* 라이트박스 */
+  .lightbox{position:fixed;inset:0;background:rgba(10,10,14,.95);z-index:60;display:flex;
+    align-items:center;justify-content:center;padding:14px;opacity:0;pointer-events:none;transition:opacity .18s}
+  .lightbox.show{opacity:1;pointer-events:auto}
+  .lightbox img{max-width:100%;max-height:100%;border-radius:8px;object-fit:contain}
+  .lightbox .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 16px calc(18px + env(safe-area-inset-bottom));
+    color:#e9e9ef;font-size:12.5px;line-height:1.5;background:linear-gradient(transparent,rgba(0,0,0,.78))}
+  @media (min-width:640px){
+    h1{font-size:28px}
+    .grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  }
+  @media (min-width:900px){
+    .grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="badge">● 공개 계정 사진만 · 12개씩 천천히</div>
+  <h1><span class="grad">인스타 사진</span> 다운로더</h1>
+  <p class="sub">보고 싶은 사진만 골라 원본으로 받고, 고른 것만 ZIP으로 묶어 받으세요.</p>
+</header>
+
+<main>
+  <!-- 1. 아이디 입력 -->
+  <section class="card">
+    <label class="blk" for="username">인스타그램 아이디</label>
+    <div class="field">
+      <span class="at">@</span>
+      <input id="username" type="text" autocomplete="off" autocapitalize="none"
+             autocorrect="off" spellcheck="false" placeholder="예: nasa">
+    </div>
+    <button class="primary" id="search" type="button">사진 목록 불러오기</button>
+    <p class="hint">한 번에 12개씩만 보여 드리고, 더 필요할 때만 추가로 불러옵니다.
+      인스타그램을 배려해 요청 사이에 1.5~3초씩 쉬어 갑니다.</p>
+    <div class="state">
+      <span class="dot {{ 'on' if status.configured else '' }}"></span>
+      <span id="session-line">
+        {% if status.configured %}로그인 세션 사용 중 ({{ status.source }}{% if status.username %} · @{{ status.username }}{% endif %})
+        {% else %}로그인 없이 시도합니다 · 막히면 아래 ‘로그인 세션’을 설정하세요{% endif %}
+      </span>
+    </div>
+  </section>
+
+  <!-- 2. 목록 -->
+  <section class="card hidden" id="list-card">
+    <div class="prof">
+      <img id="prof-pic" alt="" src="" onerror="this.style.visibility='hidden'">
+      <div class="grow">
+        <strong id="prof-name"></strong>
+        <span id="prof-meta"></span>
+      </div>
+      <button class="small" id="refresh" type="button" title="목록 새로고침">새로고침</button>
+    </div>
+
+    <div class="toolbar">
+      <label class="chip" for="unseen"><input type="checkbox" id="unseen"> 안 받은 사진만 보기</label>
+      <button class="chip" id="select-all" type="button">전체 선택</button>
+      <span class="count" id="load-count"></span>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="more-wrap">
+      <button class="ghost" id="more" type="button" style="width:100%">다음 12개 더 불러오기</button>
+      <p class="hint hidden" id="list-end">여기까지가 최근 사진입니다.</p>
+    </div>
+  </section>
+
+  <!-- 3. 진행 -->
+  <section class="card progress hidden" id="progress-card">
+    <div class="row"><span id="p-title">받는 중…</span><span id="p-pct">0%</span></div>
+    <div class="bar"><i id="p-bar"></i></div>
+    <p class="hint" id="p-hint">차단을 피하려고 사진 한 장씩 1.5~3초 쉬며 받습니다. 창을 닫지 마세요.</p>
+  </section>
+
+  <!-- 4. 오류 -->
+  <section class="card error hidden" id="error-card">
+    <strong id="err-title">문제가 생겼습니다</strong>
+    <p id="err-msg"></p>
+    <p class="hint" id="err-hint"></p>
+    <button class="ghost" id="err-login" type="button" style="margin-top:12px;width:100%">로그인 세션 설정 열기</button>
+  </section>
+
+  <!-- 5. 결과 -->
+  <section class="card hidden" id="result-card">
+    <h2 id="result-title">받은 사진</h2>
+    <a class="btn-primary" id="zip-btn" href="#" download>ZIP으로 한 번에 받기</a>
+    <p class="hint" id="save-path"></p>
+    <div class="note hidden" id="result-note"></div>
+    <div class="files" id="files"></div>
+  </section>
+
+  <!-- 6. 이전에 받은 사진 -->
+  <section class="card" id="recent-card">
+    <h2>이전에 받은 사진</h2>
+    <div id="accounts">
+      {% if accounts %}
+        {% for a in accounts %}
+        <div class="acct">
+          <div class="who"><b>@{{ a.username }}</b><span>{{ a.count }}장 · {{ a.size_mb }}MB · {{ a.latest }}</span></div>
+          <button class="mini" data-view="{{ a.username }}" type="button">보기</button>
+          <a class="mini zip" href="/zip/{{ a.username }}" download>ZIP</a>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="empty">아직 받은 사진이 없습니다.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- 7. 로그인 세션 -->
+  <section class="card" id="session-card">
+    <details id="session-details">
+      <summary>인스타그램 로그인 세션 (막힐 때 한 번만 설정)</summary>
+      <div class="body">
+        <p style="margin:0 0 10px">요즘 인스타그램은 로그인 없이 보는 길을 거의 막아 둡니다.
+          <b>내 인스타그램 계정</b>으로 로그인한 브라우저에서 sessionid를 복사해 넣으면,
+          이 앱이 그 세션으로 사진을 봅니다.</p>
+        <p style="margin:0 0 6px"><b>sessionid 복사하는 방법 (PC 브라우저)</b></p>
+        <ol style="margin:0 0 10px;padding-left:20px">
+          <li>크롬에서 인스타그램에 로그인합니다.</li>
+          <li><code class="inline">F12</code> 를 누르고 위쪽 <b>Application</b> 탭 → 왼쪽 <b>Cookies</b> → <b>https://www.instagram.com</b></li>
+          <li>목록에서 <b>sessionid</b> 를 찾아 값을 복사합니다. (30자 이상)</li>
+          <li>아래 칸에 붙여넣고 [저장하고 확인]을 누릅니다.</li>
+        </ol>
+        <p style="margin:0 0 10px">휴대폰 사파리·크롬에서는 개발자 도구가 없어서, PC에서 복사하는 것이 가장 쉽습니다.</p>
+        <textarea id="cookie" placeholder="sessionid=...; csrftoken=...  (sessionid 값만 붙여넣어도 됩니다)"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost grow" id="save-session" type="button">저장하고 확인</button>
+          <button class="ghost" id="clear-session" type="button">지우기</button>
+        </div>
+        <p class="hint" id="session-result"></p>
+        <p class="hint" style="color:var(--warn)">· 내 계정으로 요청하므로 계정이 일시 제한될 위험이 조금 커집니다.
+          정말 필요할 때만 쓰고, 세션 값은 절대 남에게 보내지 마세요.<br>
+          · 이 앱은 세션 값을 서버 메모리에만 두고 화면에는 끝 4자리만 보여 줍니다.
+          (클라우드에서는 서비스가 재시작되면 다시 넣어야 합니다)</p>
+      </div>
+    </details>
+  </section>
+
+  <!-- 8. 안내 -->
+  <section class="card">
+    <details>
+      <summary>이렇게 쓰세요 · 집 와이파이 / 클라우드 링크</summary>
+      <div class="body">
+        <p style="margin:0 0 8px"><b>집 PC에서</b> : <code class="inline">실행하기.bat</code> 더블클릭 → 검은 창에 나온
+          <code class="inline">http://192.168.x.x:5000</code> 주소로 폰에서 접속. 같은 와이파이여야 합니다.</p>
+        <p style="margin:0 0 8px"><b>클라우드(Render)에서</b> : 배포하면 나오는 <code class="inline">https://....onrender.com</code>
+          주소를 와이프분께 보내면, 어디서든 접속됩니다. 자세한 방법은 <code class="inline">사용설명서.txt</code> 참고.</p>
+        <p style="margin:0"><b>받은 사진</b> : 서버(PC)의 <code class="inline">downloads\아이디\</code> 폴더에 저장되고,
+          다운로드 이력은 <code class="inline">data\history.json</code> 에 남습니다.
+          같은 사진은 ‘다운 완료’로 표시되고 다시 받지 않습니다.</p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<!-- 하단 선택 바 -->
+<div class="selbar" id="selbar">
+  <div class="inner">
+    <span class="num" id="sel-num">0장 선택</span>
+    <button class="go" id="sel-clear" type="button" style="flex:0 0 auto;background:#fff;color:#374151;border:1.5px solid var(--line)">해제</button>
+    <button class="go" id="sel-download" type="button">선택한 사진 원본으로 받기</button>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <img id="lightbox-img" alt="">
+  <div class="cap" id="lightbox-cap"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var BATCH = 12;
+  var S = { username: "", profile: null, items: [], shown: 0, sel: new Set(),
+            unseenOnly: false, hasMore: false, busy: false, jobId: null };
+
+  function $(id) { return document.getElementById(id); }
+  function show(el) { el.classList.remove("hidden"); }
+  function hide(el) { el.classList.add("hidden"); }
+  function num(n) { try { return Number(n || 0).toLocaleString("ko-KR"); } catch (e) { return String(n || 0); } }
+  function humanSize(b) {
+    if (!b) return "";
+    return b > 1048576 ? (b / 1048576).toFixed(1) + "MB" : Math.round(b / 1024) + "KB";
+  }
+
+  /* ---------------- 검색 ---------------- */
+  function search(refresh) {
+    var name = ($("username").value || "").trim();
+    if (!name) { $("username").focus(); alert("인스타그램 아이디를 입력해 주세요."); return; }
+    if (S.busy) return;
+    S.busy = true;
+    S.username = name.replace(/^@+/, "").toLowerCase().replace(/\/+$/, "");
+    S.sel.clear(); S.items = []; S.shown = 0; S.profile = null;
+    hide($("error-card")); hide($("result-card"));
+    $("grid").innerHTML = "";
+    updateSelBar();
+    $("search").disabled = true;
+    $("search").textContent = "불러오는 중…";
+
+    fetch("/api/list", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: name, refresh: !!refresh })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      S.busy = false;
+      $("search").disabled = false;
+      $("search").textContent = "사진 목록 불러오기";
+      if (!d.ok) {
+        if (d.cooldown) { showError(d.title || "잠시만 기다려 주세요", d.error, d.hint, false); }
+        else { showError(d.title || "불러올 수 없습니다", d.error || "", d.hint || "", !!d.need_login); }
+        return;
+      }
+      S.username = d.username;
+      S.profile = d.profile;
+      S.items = d.items || [];
+      S.shown = Math.min(BATCH, S.items.length);
+      S.hasMore = !!d.has_more;
+      renderProfile(d.profile);
+      renderAll();
+      show($("list-card"));
+      $("list-card").scrollIntoView({ behavior: "smooth", block: "start" });
+      if (d.note) { showError("알림", d.note, "", false); }
+    }).catch(function () {
+      S.busy = false;
+      $("search").disabled = false;
+      $("search").textContent = "사진 목록 불러오기";
+      showError("연결이 끊겼습니다", "프로그램이 켜져 있는지 확인하고 다시 시도해 주세요.", "", false);
+    });
+  }
+
+  function renderProfile(p) {
+    if (!p) return;
+    var pic = $("prof-pic");
+    pic.style.visibility = p.pic ? "visible" : "hidden";
+    pic.src = p.pic || "";
+    $("prof-name").textContent = (p.full_name ? p.full_name + " " : "") + "@" + p.username;
+    var bits = [];
+    if (p.posts) bits.push("게시물 " + num(p.posts));
+    if (p.followers) bits.push("팔로워 " + num(p.followers));
+    $("prof-meta").textContent = bits.join(" · ");
+  }
+
+  /* ---------------- 타일 ---------------- */
+  function makeTile(it) {
+    var tile = document.createElement("article");
+    tile.className = "tile";
+    tile.dataset.key = it.key;
+
+    var thumb = document.createElement("div");
+    thumb.className = "thumb";
+    var img = document.createElement("img");
+    img.loading = "lazy";
+    img.alt = it.caption || "사진";
+    img.src = it.thumb || it.thumb_url;
+    img.onerror = function () {
+      if (!this.dataset.fallback) {
+        this.dataset.fallback = "1";
+        this.src = it.thumb_url;          // 인스타 CDN 이 막히면 서버가 대신 받아 줍니다
+        return;
+      }
+      this.style.display = "none";
+      if (!thumb.querySelector(".noimg")) {
+        var noimg = document.createElement("span");
+        noimg.className = "noimg";
+        noimg.textContent = "미리보기 없음";
+        thumb.appendChild(noimg);
+      }
+    };
+    thumb.appendChild(img);
+
+    var lab = document.createElement("label");
+    lab.className = "pick";
+    lab.setAttribute("aria-label", "선택");
+    var cb = document.createElement("input");
+    cb.type = "checkbox"; cb.dataset.key = it.key;
+    lab.appendChild(cb);
+    thumb.appendChild(lab);
+
+    if (it.downloaded) {
+      var flag = document.createElement("span");
+      flag.className = "flag";
+      flag.textContent = "다운 완료";
+      thumb.appendChild(flag);
+    }
+    tile.appendChild(thumb);
+
+    var info = document.createElement("div");
+    info.className = "info";
+    var date = document.createElement("span");
+    date.className = "date";
+    date.textContent = (it.date || "").slice(0, 10) || "날짜 없음";
+    var cap = document.createElement("p");
+    cap.className = "cap";
+    cap.textContent = it.caption || "(설명 없음)";
+    info.appendChild(date); info.appendChild(cap);
+    tile.appendChild(info);
+
+    var acts = document.createElement("div");
+    acts.className = "acts";
+    var origin = document.createElement("a");
+    origin.className = "origin";
+    origin.href = it.download_url;
+    origin.setAttribute("download", "");
+    origin.textContent = "원본 받기";
+    origin.dataset.dl = it.key;
+    acts.appendChild(origin);
+    tile.appendChild(acts);
+
+    tile.dataset.downloaded = it.downloaded ? "1" : "0";
+    tile.dataset.caption = it.caption || "";
+    tile.dataset.thumburl = it.thumb_url;
+    return tile;
+  }
+
+  function renderAll() {
+    var grid = $("grid");
+    grid.innerHTML = "";
+    for (var i = 0; i < S.shown && i < S.items.length; i++) grid.appendChild(makeTile(S.items[i]));
+    syncTiles();
+    updateMore();
+  }
+
+  function appendTiles() {
+    var grid = $("grid");
+    var frag = document.createDocumentFragment();
+    for (var i = grid.children.length; i < S.shown && i < S.items.length; i++) {
+      frag.appendChild(makeTile(S.items[i]));
+    }
+    grid.appendChild(frag);
+    syncTiles();
+    updateMore();
+  }
+
+  function syncTiles() {
+    var grid = $("grid"), visible = 0;
+    Array.prototype.forEach.call(grid.children, function (tile) {
+      var key = tile.dataset.key;
+      tile.classList.toggle("sel", S.sel.has(key));
+      var cb = tile.querySelector("input[type=checkbox]");
+      if (cb) cb.checked = S.sel.has(key);
+      var isDone = tile.dataset.downloaded === "1";
+      tile.classList.toggle("done", isDone);
+      var hideMe = S.unseenOnly && isDone;
+      tile.classList.toggle("hidden", hideMe);
+      if (!hideMe) visible++;
+    });
+    $("load-count").textContent = visible + "개 표시 · 전체 " + S.items.length + "개 불러옴";
+  }
+
+  function updateMore() {
+    var btn = $("more"), end = $("list-end");
+    var hidden = S.items.length - S.shown;
+    hide(end);
+    if (hidden > 0) {
+      btn.innerHTML = "불러온 " + hidden + "개 더 보기";
+      btn.disabled = false;
+      show(btn);
+    } else if (S.hasMore) {
+      btn.innerHTML = "다음 12개 더 불러오기";
+      btn.disabled = false;
+      show(btn);
+    } else {
+      hide(btn);
+      end.textContent = "여기까지가 이 계정의 최근 사진입니다.";
+      show(end);
+    }
+  }
+
+  function loadMore() {
+    var btn = $("more");
+    if (S.shown < S.items.length) {          // 이미 받아 둔 목록에서 더 보여 주기
+      S.shown = Math.min(S.items.length, S.shown + BATCH);
+      appendTiles();
+      return;
+    }
+    if (!S.hasMore || S.busy) return;
+    S.busy = true;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>인스타그램에서 불러오는 중…';
+    fetch("/api/more", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: S.username, start: S.items.length })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      S.busy = false;
+      btn.disabled = false;
+      if (!d.ok) { showError("더 불러올 수 없습니다", d.error || "", d.hint || "", !!d.need_login); return; }
+      (d.items || []).forEach(function (it) { S.items.push(it); });
+      S.hasMore = !!d.has_more;
+      S.shown = Math.min(S.items.length, S.shown + BATCH);
+      appendTiles();
+      if (d.warning) showError(d.title || "알림", d.warning, d.warning_hint || "", !!d.need_login);
+    }).catch(function () {
+      S.busy = false; btn.disabled = false; btn.textContent = "다음 12개 더 불러오기";
+      showError("연결이 끊겼습니다", "잠시 뒤 다시 시도해 주세요.", "", false);
+    });
+  }
+
+  /* ---------------- 선택 ---------------- */
+  function updateSelBar() {
+    var n = S.sel.size;
+    $("sel-num").textContent = n + "장 선택";
+    $("sel-download").disabled = n === 0;
+    $("selbar").classList.toggle("show", n > 0);
+  }
+
+  function toggleSel(key) {
+    if (S.sel.has(key)) S.sel.delete(key); else S.sel.add(key);
+    syncTiles(); updateSelBar();
+  }
+
+  $("grid").addEventListener("click", function (e) {
+    if (e.target.closest(".pick")) return;      // 체크박스는 change 이벤트에서 처리
+
+    var dl = e.target.closest("[data-dl]");
+    if (dl) {
+      var key = dl.dataset.dl;
+      setTimeout(function () { markDownloaded([key]); }, 2500);
+      setTimeout(loadAccounts, 4000);
+      return;
+    }
+
+    var thumb = e.target.closest(".thumb");
+    if (thumb) {
+      var tile = thumb.closest(".tile");
+      var img = thumb.querySelector("img");
+      var lb = $("lightbox");
+      $("lightbox-img").src = img.src;
+      $("lightbox-cap").textContent = tile.dataset.caption || "";
+      lb.classList.add("show");
+    }
+  });
+
+  $("grid").addEventListener("change", function (e) {
+    var cb = e.target;
+    if (!cb || cb.type !== "checkbox") return;
+    var key = cb.dataset.key;
+    if (cb.checked) S.sel.add(key); else S.sel.delete(key);
+    syncTiles();
+    updateSelBar();
+  });
+
+  $("unseen").addEventListener("change", function () {
+    S.unseenOnly = this.checked; syncTiles();
+  });
+
+  $("select-all").addEventListener("click", function () {
+    var grid = $("grid");
+    Array.prototype.forEach.call(grid.children, function (t) {
+      if (t.dataset.downloaded === "1") return;
+      if (S.unseenOnly && t.classList.contains("hidden")) return;
+      S.sel.add(t.dataset.key);
+    });
+    syncTiles(); updateSelBar();
+  });
+
+  $("sel-clear").addEventListener("click", function () {
+    S.sel.clear(); syncTiles(); updateSelBar();
+  });
+
+  /* ---------------- 다운로드 ---------------- */
+  function markDownloaded(keys) {
+    if (!keys || !keys.length) return;
+    S.items.forEach(function (it) {
+      if (keys.indexOf(it.key) >= 0) it.downloaded = true;
+    });
+    var set = {};
+    keys.forEach(function (k) { set[k] = 1; });
+    Array.prototype.forEach.call($("grid").children, function (t) {
+      if (set[t.dataset.key]) t.dataset.downloaded = "1";
+    });
+    syncTiles();
+  }
+
+  $("sel-download").addEventListener("click", function () {
+    var keys = Array.from(S.sel);
+    if (!keys.length || S.jobId || S.busy) return;
+    S.busy = true;
+    hide($("error-card")); hide($("result-card"));
+    show($("progress-card"));
+    $("p-title").textContent = "준비 중…";
+    $("p-pct").textContent = "0%";
+    $("p-bar").style.width = "2%";
+    $("p-hint").textContent = "차단을 피하려고 사진 한 장씩 1.5~3초 쉬며 받습니다. 창을 닫지 마세요.";
+
+    fetch("/api/download", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: S.username, keys: keys })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      S.busy = false;
+      if (!d.ok) {
+        hide($("progress-card"));
+        showError("받을 수 없습니다", d.error || "", d.hint || "", !!d.need_login);
+        return;
+      }
+      S.jobId = d.job_id;
+      pollJob();
+    }).catch(function () {
+      S.busy = false; hide($("progress-card"));
+      showError("연결이 끊겼습니다", "프로그램이 켜져 있는지 확인해 주세요.", "", false);
+    });
+  });
+
+  function pollJob() {
+    if (!S.jobId) return;
+    fetch("/api/job/" + S.jobId, { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) { S.jobId = null; hide($("progress-card")); return; }
+        var pct = d.percent || 0;
+        $("p-title").textContent = d.message || "받는 중…";
+        $("p-pct").textContent = pct + "%";
+        $("p-bar").style.width = Math.max(2, pct) + "%";
+        if (d.total) $("p-hint").textContent = d.done + " / " + d.total + "장 완료";
+
+        if (d.state === "running") { setTimeout(pollJob, 900); return; }
+
+        S.jobId = null;
+        hide($("progress-card"));
+        if (d.state === "done") {
+          markDownloaded((d.files || []).map(function (f) { return f.key; }));
+          S.sel.clear(); updateSelBar();
+          renderResult(d);
+          loadAccounts();
+        } else {
+          showError(d.error_title || "받지 못했습니다", d.error || "", d.error_hint || "", !!d.need_login);
+          if (d.files && d.files.length) { renderResult(d); }
+          loadAccounts();
+        }
+      })
+      .catch(function () { setTimeout(pollJob, 1500); });
+  }
+
+  function renderResult(d) {
+    var files = d.files || [];
+    $("result-title").textContent = d.message || ("사진 " + files.length + "장을 받았습니다.");
+    $("zip-btn").href = d.zip_url || "#";
+    $("zip-btn").textContent = "선택한 " + files.length + "장 ZIP으로 한 번에 받기";
+    $("save-path").textContent = "서버(PC)의 downloads\\" + (d.username || S.username) + " 폴더에 저장되었습니다.";
+    var note = $("result-note");
+    if (d.error) { note.textContent = d.error + (d.error_hint ? " " + d.error_hint : ""); show(note); }
+    else if (d.errors) { note.textContent = d.errors + "장은 받지 못했습니다. 다시 시도해 주세요."; show(note); }
+    else hide(note);
+
+    var box = $("files");
+    box.innerHTML = "";
+    files.slice(0, 60).forEach(function (f) {
+      var a = document.createElement("a");
+      a.href = f.url;
+      a.setAttribute("download", "");
+      var n = document.createElement("span");
+      n.textContent = "📷 " + f.name;
+      var sz = document.createElement("span");
+      sz.textContent = humanSize(f.size);
+      a.appendChild(n); a.appendChild(sz);
+      box.appendChild(a);
+    });
+    show($("result-card"));
+    $("result-card").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ---------------- 오류 ---------------- */
+  function showError(title, msg, hint, needLogin) {
+    $("err-title").textContent = title || "문제가 생겼습니다";
+    $("err-msg").textContent = msg || "";
+    $("err-hint").textContent = hint || "";
+    if (needLogin) show($("err-login")); else hide($("err-login"));
+    show($("error-card"));
+    $("error-card").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  $("err-login").addEventListener("click", function () {
+    $("session-details").open = true;
+    $("session-card").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("cookie").focus();
+  });
+
+  /* ---------------- 세션 ---------------- */
+  function paintSession(status) {
+    $("session-line").textContent = status.configured
+      ? "로그인 세션 사용 중 (" + status.source + (status.username ? " · @" + status.username : "") + ")"
+      : "로그인 없이 시도합니다 · 막히면 아래 ‘로그인 세션’을 설정하세요";
+  }
+
+  $("save-session").addEventListener("click", function () {
+    var val = ($("cookie").value || "").trim();
+    if (!val) { $("session-result").textContent = "sessionid 값을 붙여넣어 주세요."; return; }
+    $("save-session").disabled = true;
+    $("session-result").textContent = "확인하는 중… (최대 10초)";
+    fetch("/api/session", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cookie: val })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      $("save-session").disabled = false;
+      if (!d.ok) {
+        $("session-result").textContent = "저장하지 못했습니다: " + (d.error || "");
+        return;
+      }
+      $("cookie").value = "";
+      paintSession(d.status);
+      $("session-result").textContent = d.verified
+        ? "✅ @" + d.username + " 계정으로 연결되었습니다. 이제 목록을 다시 불러와 보세요."
+        : "저장했습니다만 확인이 되지 않았습니다. " + (d.error || "쿠키를 다시 확인해 주세요.");
+    }).catch(function () {
+      $("save-session").disabled = false;
+      $("session-result").textContent = "서버에 연결하지 못했습니다.";
+    });
+  });
+
+  $("clear-session").addEventListener("click", function () {
+    fetch("/api/session/clear", { method: "POST" }).then(function (r) { return r.json(); }).then(function (d) {
+      paintSession(d.status);
+      $("session-result").textContent = "세션을 지웠습니다.";
+    });
+  });
+
+  /* ---------------- 계정 목록 ---------------- */
+  function loadAccounts() {
+    fetch("/api/accounts", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) paintAccounts(d.accounts || []);
+    }).catch(function () {});
+  }
+
+  function paintAccounts(list) {
+    var box = $("accounts");
+    box.innerHTML = "";
+    if (!list.length) {
+      var p = document.createElement("p");
+      p.className = "empty"; p.textContent = "아직 받은 사진이 없습니다.";
+      box.appendChild(p); return;
+    }
+    list.forEach(function (a) {
+      var row = document.createElement("div");
+      row.className = "acct";
+      var who = document.createElement("div");
+      who.className = "who";
+      var b = document.createElement("b");
+      b.textContent = "@" + a.username;
+      var s = document.createElement("span");
+      s.textContent = a.count + "장 · " + a.size_mb + "MB · " + (a.latest || "");
+      who.appendChild(b); who.appendChild(s);
+
+      var view = document.createElement("button");
+      view.className = "mini"; view.type = "button"; view.textContent = "보기";
+      view.dataset.view = a.username;
+
+      var zip = document.createElement("a");
+      zip.className = "mini zip"; zip.href = "/zip/" + encodeURIComponent(a.username);
+      zip.setAttribute("download", ""); zip.textContent = "ZIP";
+
+      row.appendChild(who); row.appendChild(view); row.appendChild(zip);
+      box.appendChild(row);
+    });
+  }
+
+  document.addEventListener("click", function (e) {
+    var v = e.target.closest("[data-view]");
+    if (v) {
+      $("username").value = v.dataset.view;
+      search(false);
+    }
+  });
+
+  /* ---------------- 기타 ---------------- */
+  $("search").addEventListener("click", function () { search(false); });
+  $("username").addEventListener("keydown", function (e) { if (e.key === "Enter") search(false); });
+  $("refresh").addEventListener("click", function () { search(true); });
+  $("more").addEventListener("click", loadMore);
+
+  $("lightbox").addEventListener("click", function () {
+    this.classList.remove("show"); $("lightbox-img").src = "";
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") $("lightbox").classList.remove("show");
+  });
+})();
+</script>
+</body>
+</html>

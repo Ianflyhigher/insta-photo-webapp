@@ -1,0 +1,4 @@
+Flask>=3.0
+instaloader>=4.14
+# gunicorn 은 리눅스(클라우드) 전용입니다. 윈도우에서는 자동으로 건너뜁니다.
+gunicorn>=21.2; sys_platform != "win32"
