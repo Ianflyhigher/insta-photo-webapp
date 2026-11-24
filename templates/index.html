@@ -799,8 +799,16 @@
       box.appendChild(p);
     }
     if (link) {
+      /* 혹시 서버가 상대 경로(/challenge/...)를 보내와도 우리 사이트 주소가 아니라
+         인스타그램 주소로 열리도록 한 번 더 절대 주소로 바꿉니다. */
+      var href = String(link).trim();
+      if (href.indexOf("//") === 0) {
+        href = "https:" + href;
+      } else if (!/^https?:\/\//i.test(href)) {
+        href = "https://www.instagram.com" + (href.charAt(0) === "/" ? "" : "/") + href;
+      }
       var a = document.createElement("a");
-      a.href = link; a.target = "_blank"; a.rel = "noopener";
+      a.href = href; a.target = "_blank"; a.rel = "noopener";
       a.textContent = "본인 확인 페이지 열기";
       box.appendChild(a);
     }

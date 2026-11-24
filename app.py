@@ -36,6 +36,7 @@ import webbrowser
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 from flask import (Flask, abort, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
@@ -472,12 +473,58 @@ def pending_pop(flow: str) -> dict | None:
     return entry
 
 
+INSTAGRAM_BASE_URL = "https://www.instagram.com/"
+DEFAULT_CHALLENGE_URL = "https://www.instagram.com/challenge/"
+
+
+def absolute_checkpoint_url(url: str) -> str:
+    """인스타그램이 돌려준 주소를 항상 https://www.instagram.com/... 절대 주소로 만듭니다.
+
+    instaloader는 checkpoint_url을 '/challenge/...' 같은 상대 경로로 주는 때가 있습니다.
+    그대로 링크에 넣으면 우리 사이트 주소(예: insta-photo-webapp.onrender.com/challenge/...)
+    로 열려 404(Not Found)가 나므로, 여기서 인스타그램 도메인을 붙여 돌려줍니다.
+    """
+    raw = (url or "").strip().strip("\"'<>")
+    raw = raw.rstrip(".,;)")
+    if not raw:
+        return ""
+    low = raw.lower()
+    if low.startswith(("instagram.com", "www.instagram.com", "m.instagram.com")):
+        raw = "https://" + raw
+    if raw.startswith("//"):
+        raw = "https:" + raw
+    fixed = urljoin(INSTAGRAM_BASE_URL, raw)
+    parsed = urlparse(fixed)
+    if parsed.scheme not in ("http", "https"):
+        return ""
+    host = (parsed.netloc or "").lower().split(":")[0]
+    if host != "instagram.com" and not host.endswith(".instagram.com"):
+        return ""          # 인스타그램 주소가 아니면 링크로 쓰지 않습니다.
+    return fixed
+
+
 def checkpoint_url(message: str) -> str:
-    """instaloader 안내문에서 본인 확인(checkpoint) 주소를 뽑아냅니다."""
-    m = re.search(r"Point your browser to (\S+)", message or "")
-    if not m:
-        m = re.search(r"(https://[\S]*challenge[\S]*)", message or "")
-    return m.group(1).rstrip(".,") if m else ""
+    """instaloader 안내문에서 본인 확인(checkpoint) 주소를 절대 주소로 뽑아냅니다."""
+    text = message or ""
+    patterns = (
+        r"Point your browser to\s+(\S+)",          # instaloader 기본 문구
+        r"((?:https?:)?//\S*(?:challenge|checkpoint)\S*)",   # 절대 주소
+        r"(/[^\s'\"]*(?:challenge|checkpoint)[^\s'\"]*)",   # '/challenge/...' 상대 경로
+    )
+    for pattern in patterns:
+        m = re.search(pattern, text, re.IGNORECASE)
+        if not m:
+            continue
+        candidate = m.group(1)
+        if "/" not in candidate:      # ' -', 'None' 처럼 주소가 아닌 값은 건너뜁니다.
+            continue
+        fixed = absolute_checkpoint_url(candidate)
+        if fixed:
+            return fixed
+    # 주소를 못 뽑았거나 빈 값이어도 본인 확인 상황이면 기본 주소로 보냅니다.
+    if re.search(r"challenge|checkpoint", text, re.IGNORECASE):
+        return DEFAULT_CHALLENGE_URL
+    return ""
 
 
 def verify_session() -> dict:
@@ -1069,7 +1116,7 @@ def describe_login_error(exc: Exception) -> dict:
             "error": "낯선 기기에서 로그인했다며 확인을 요청했습니다.",
             "hint": "인스타그램 앱 알림이나 메일에서 ‘본인이 맞습니다’를 눌러 주세요. "
                     "또는 아래 본인 확인 주소를 폰에서 열어 코드를 넣어 주세요. 끝나면 [로그인]을 한 번 더 누르면 됩니다.",
-            "checkpoint": cp,
+            "checkpoint": cp or DEFAULT_CHALLENGE_URL,
         }
     if "does not exist" in text:
         return {
