@@ -43,14 +43,17 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
 from instaloader import Instaloader, Profile
 from instaloader import exceptions as il_exceptions
 from instaloader.exceptions import (
+    BadCredentialsException,
     ConnectionException,
     InstaloaderException,
+    LoginException,
     LoginRequiredException,
     ProfileNotExistsException,
     QueryReturnedBadRequestException,
     QueryReturnedForbiddenException,
     QueryReturnedNotFoundException,
     TooManyRequestsException,
+    TwoFactorAuthRequiredException,
 )
 
 # ---------------------------------------------------------------------------
@@ -290,8 +293,14 @@ def item_lookup(username: str, key: str) -> dict | None:
 # 세션(로그인 쿠키) — 메모리에만 보관, 화면에는 마스킹해서 표시
 # ---------------------------------------------------------------------------
 
-SESSION_CFG: dict = {"sessionid": "", "csrftoken": "", "ds_user_id": "", "username": "", "set_at": 0.0}
+SESSION_CFG: dict = {"sessionid": "", "csrftoken": "", "ds_user_id": "", "username": "",
+                     "set_at": 0.0, "source": ""}
 SESSION_LOCK = threading.RLock()
+
+# 로그인 1단계(비밀번호 통과) 후 인증 코드를 기다리는 상태. 비밀번호는 여기에도 남기지 않습니다.
+PENDING_LOGINS: dict[str, dict] = {}
+PENDING_LOCK = threading.RLock()
+PENDING_TTL = 15 * 60
 SESSION_META: dict = {"ok": False, "checked": 0.0}
 
 
@@ -345,7 +354,7 @@ def session_status() -> dict:
         sid = cfg["sessionid"]
         return {
             "configured": True,
-            "source": "직접 입력",
+            "source": cfg.get("source") or "직접 입력",
             "username": cfg.get("username") or "",
             "masked": f"sessionid …{sid[-4:]}",
         }
@@ -415,6 +424,62 @@ def build_loader() -> tuple[Instaloader, str | None, str]:
     return loader, None, note
 
 
+def session_from_loader(loader: Instaloader, username: str) -> str:
+    """로그인에 성공한 loader 의 쿠키를 앱 세션으로 옮겨 담습니다(비밀번호는 보관하지 않음)."""
+    # pylint: disable=protected-access
+    cookies = loader.context._session.cookies.get_dict()
+    sid = cookies.get("sessionid") or ""
+    if not sid:
+        raise FriendlyError(
+            "인스타그램 로그인은 되었지만 세션 값을 받지 못했습니다.",
+            "잠시 뒤 다시 시도해 주세요.",
+            "세션 없음",
+        )
+    with SESSION_LOCK:
+        SESSION_CFG.update({
+            "sessionid": sid,
+            "csrftoken": cookies.get("csrftoken") or "",
+            "ds_user_id": cookies.get("ds_user_id") or "",
+            "username": username,
+            "set_at": time.time(),
+            "source": "아이디·비밀번호 로그인",
+        })
+        SESSION_META["ok"] = True
+        SESSION_META["checked"] = time.time()
+    return username
+
+
+def pending_put(loader: Instaloader, username: str) -> str:
+    flow = uuid.uuid4().hex
+    now = time.time()
+    with PENDING_LOCK:
+        for key in [k for k, v in PENDING_LOGINS.items() if now - v["created"] > PENDING_TTL]:
+            PENDING_LOGINS.pop(key, None)
+        while len(PENDING_LOGINS) >= 5:
+            oldest = min(PENDING_LOGINS.items(), key=lambda kv: kv[1]["created"])[0]
+            PENDING_LOGINS.pop(oldest, None)
+        PENDING_LOGINS[flow] = {"loader": loader, "username": username, "created": now}
+    return flow
+
+
+def pending_pop(flow: str) -> dict | None:
+    with PENDING_LOCK:
+        entry = PENDING_LOGINS.pop(flow, None)
+    if not entry:
+        return None
+    if time.time() - entry["created"] > PENDING_TTL:
+        return None
+    return entry
+
+
+def checkpoint_url(message: str) -> str:
+    """instaloader 안내문에서 본인 확인(checkpoint) 주소를 뽑아냅니다."""
+    m = re.search(r"Point your browser to (\S+)", message or "")
+    if not m:
+        m = re.search(r"(https://[\S]*challenge[\S]*)", message or "")
+    return m.group(1).rstrip(".,") if m else ""
+
+
 def verify_session() -> dict:
     """입력된 세션이 실제로 어느 계정인지 확인합니다."""
     loader, user, note = build_loader()
@@ -476,14 +541,14 @@ def describe_error(exc: Exception) -> FriendlyError:
         return FriendlyError(
             "인스타그램이 로그인을 요구하고 있습니다. (401)",
             "요즘 인스타그램은 로그인 없이 보는 길을 거의 막아 두었습니다. "
-            "아래 [인스타그램 로그인 세션]에 sessionid를 한 번만 넣어 두면 해결됩니다.",
+            "아래 [인스타그램 로그인]에서 아이디·비밀번호로 한 번만 로그인해 두면 해결됩니다.",
             "로그인 필요",
             need_login=True,
         )
     if isinstance(exc, QueryReturnedForbiddenException) or status == 403:
         return FriendlyError(
             "인스타그램이 접근을 거부했습니다. (403)",
-            "잠시 뒤 다시 시도하거나 [인스타그램 로그인 세션]을 설정해 보세요. "
+            "잠시 뒤 다시 시도하거나 아래 [인스타그램 로그인]에서 로그인해 보세요. "
             "같은 아이디로 너무 자주 누르면 차단이 길어집니다.",
             "접근 거부",
             need_login=True,
@@ -975,8 +1040,165 @@ def api_session_set():
 @app.post("/api/session/clear")
 def api_session_clear():
     with SESSION_LOCK:
-        SESSION_CFG.update({"sessionid": "", "csrftoken": "", "ds_user_id": "", "username": "", "set_at": 0.0})
+        SESSION_CFG.update({"sessionid": "", "csrftoken": "", "ds_user_id": "", "username": "",
+                            "set_at": 0.0, "source": ""})
     return jsonify(ok=True, status=session_status())
+
+
+def describe_login_error(exc: Exception) -> dict:
+    """로그인 실패를 화면에 보여 줄 한국어 안내로 바꿉니다."""
+    if isinstance(exc, BadCredentialsException):
+        text = str(exc) or ""
+        if "2FA" in text or "two" in text.lower():
+            return {
+                "title": "인증 코드가 맞지 않습니다",
+                "error": "인스타그램이 인증 코드를 받아들이지 않았습니다.",
+                "hint": "문자·메일에 온 가장 최근 코드를 넣어 주세요. 시간이 지나 만료되었다면 [새 코드 받기]를 눌러 다시 받으세요.",
+            }
+        return {
+            "title": "아이디 또는 비밀번호가 맞지 않습니다",
+            "error": "인스타그램이 로그인을 받아들이지 않았습니다.",
+            "hint": "인스타그램 앱에 로그인할 때 쓰는 아이디와 비밀번호를 그대로 넣어 주세요. "
+                    "비밀번호는 저장하지 않으니 몇 번이든 다시 넣어 보셔도 됩니다.",
+        }
+    text = str(exc) or exc.__class__.__name__
+    cp = checkpoint_url(text)
+    if cp or "checkpoint" in text.lower() or "challenge" in text.lower():
+        return {
+            "title": "인스타그램이 본인 확인을 요구합니다",
+            "error": "낯선 기기에서 로그인했다며 확인을 요청했습니다.",
+            "hint": "인스타그램 앱 알림이나 메일에서 ‘본인이 맞습니다’를 눌러 주세요. "
+                    "또는 아래 본인 확인 주소를 폰에서 열어 코드를 넣어 주세요. 끝나면 [로그인]을 한 번 더 누르면 됩니다.",
+            "checkpoint": cp,
+        }
+    if "does not exist" in text:
+        return {
+            "title": "그런 아이디의 계정이 없습니다",
+            "error": "인스타그램에 등록되지 않은 아이디입니다.",
+            "hint": "아이디 철자를 확인해 주세요.",
+        }
+    if "blocked IP" in text or "403" in text or "Forbidden" in text:
+        return {
+            "title": "인스타그램이 이 서버를 막고 있습니다",
+            "error": "클라우드 서버 주소로 들어오는 로그인을 인스타그램이 거부했습니다.",
+            "hint": "잠시 뒤 다시 시도해 보시고, 계속 막히면 아래 ‘세션 값으로 연결’을 쓰는 방법밖에 없습니다.",
+        }
+    if "429" in text or "too many" in text.lower():
+        return {
+            "title": "잠시 차단되었습니다 (요청 과다)",
+            "error": "인스타그램이 로그인 시도를 너무 많다고 판단했습니다.",
+            "hint": "15~30분 기다렸다가 다시 시도해 주세요.",
+        }
+    if "JSON decode" in text or "Unexpected response" in text:
+        return {
+            "title": "인스타그램 응답을 이해하지 못했습니다",
+            "error": "인스타그램이 예상과 다른 답을 보냈습니다.",
+            "hint": "잠시 뒤 다시 시도해 주세요. 계속되면 인스타그램이 이 서버 주소를 막은 것일 수 있습니다.",
+        }
+    return {
+        "title": "로그인하지 못했습니다",
+        "error": text[:200],
+        "hint": "잠시 뒤 다시 시도해 주세요.",
+    }
+
+
+@app.post("/api/session/login")
+def api_session_login():
+    """인스타그램 아이디·비밀번호로 로그인합니다.
+
+    · body: {"username": ..., "password": ...}                    → 1단계
+    · body: {"flow_id": ..., "code": ...}                         → 인증 코드 단계
+    비밀번호는 이 요청 처리 중에만 쓰고 어디에도 저장하지 않습니다.
+    """
+    data = request.get_json(silent=True) or {}
+
+    # --- 2단계: 인증 코드 ---
+    flow_id = str(data.get("flow_id") or "").strip()
+    if flow_id:
+        code = re.sub(r"\s+", "", str(data.get("code") or ""))
+        if not code:
+            return jsonify(ok=False, error="인증 코드를 입력해 주세요."), 400
+        entry = pending_pop(flow_id)
+        if not entry:
+            return jsonify(ok=False, title="처음부터 다시 해 주세요",
+                           error="인증 코드 입력 시간이 지났습니다.",
+                           hint="아이디와 비밀번호를 다시 넣고 로그인해 주세요."), 200
+        loader = entry["loader"]
+        try:
+            pause_gate(0.5, 1.0)
+            loader.two_factor_login(code)
+        except BadCredentialsException as exc:
+            # 코드가 틀렸으면 같은 흐름으로 한 번 더 시도할 수 있게 되돌려 둡니다.
+            with PENDING_LOCK:
+                PENDING_LOGINS[flow_id] = entry
+            body = describe_login_error(exc)
+            body.update(ok=False, need_code=True, flow_id=flow_id)
+            return jsonify(body), 200
+        except LoginException as exc:
+            body = describe_login_error(exc)
+            body.update(ok=False)
+            return jsonify(body), 200
+        except Exception as exc:              # noqa: BLE001 - 화면에는 짧은 안내만
+            body = describe_error(exc)
+            return jsonify(ok=False, title=body.title or "로그인하지 못했습니다",
+                           error=body.message, hint=body.hint), 200
+        try:
+            name = session_from_loader(loader, entry["username"])
+        except FriendlyError as exc:
+            return jsonify(ok=False, title=exc.title, error=exc.message, hint=exc.hint), 200
+        return jsonify(ok=True, logged_in=True, username=name, status=session_status())
+
+    # --- 1단계: 아이디·비밀번호 ---
+    username = (str(data.get("username") or "").strip().lstrip("@")).lower()
+    password = str(data.get("password") or "")
+    if not USERNAME_RE.match(username):
+        return jsonify(ok=False, error="인스타그램 아이디를 정확히 넣어 주세요."), 400
+    if not password:
+        return jsonify(ok=False, error="비밀번호를 넣어 주세요."), 400
+
+    loader = Instaloader(
+        download_pictures=False, download_videos=False, download_video_thumbnails=False,
+        download_geotags=False, download_comments=False, save_metadata=False,
+        compress_json=False, post_metadata_txt_pattern="", max_connection_attempts=2,
+        request_timeout=30.0, quiet=True, sleep=False,
+    )
+    try:
+        loader.login(username, password)
+    except TwoFactorAuthRequiredException:
+        flow = pending_put(loader, username)
+        return jsonify(
+            ok=True, need_code=True, flow_id=flow, username=username,
+            title="인증 코드를 넣어 주세요",
+            message="인스타그램이 새 기기 로그인으로 보고 인증 코드를 보냈습니다.",
+            hint="문자 메시지나 메일(스팸함 포함)에 온 6자리 코드를 넣어 주세요. "
+                 "코드가 안 오면 인스타그램 앱 알림에서 ‘본인이 맞습니다’를 누르면 바로 될 때도 있습니다.",
+        )
+    except BadCredentialsException as exc:
+        body = describe_login_error(exc)
+        return jsonify(ok=False, **body), 200
+    except LoginException as exc:
+        body = describe_login_error(exc)
+        return jsonify(ok=False, **body), 200
+    except ConnectionException as exc:
+        friendly = describe_error(exc)
+        return jsonify(ok=False, title=friendly.title, error=friendly.message, hint=friendly.hint), 200
+    except Exception as exc:                  # noqa: BLE001
+        friendly = describe_error(exc)
+        return jsonify(ok=False, title=friendly.title or "로그인하지 못했습니다",
+                       error=friendly.message, hint=friendly.hint), 200
+    finally:
+        # 참조를 오래 들고 있지 않도록 비밀번호는 즉시 비웁니다.
+        password = ""
+        del password
+
+    try:
+        name = session_from_loader(loader, username)
+    except FriendlyError as exc:
+        return jsonify(ok=False, title=exc.title, error=exc.message, hint=exc.hint), 200
+    # 로그인한 계정으로 바로 확인
+    check = verify_session()
+    return jsonify(ok=True, logged_in=True, username=name, verified=check["ok"],
+                   status=session_status())
 
 
 @app.post("/api/list")

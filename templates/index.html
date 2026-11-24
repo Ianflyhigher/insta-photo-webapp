@@ -145,6 +145,16 @@
   .state{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:10px}
   .dot{width:7px;height:7px;border-radius:50%;background:#c9ced8;flex:0 0 auto}
   .dot.on{background:var(--ok)}
+  /* 로그인 결과 */
+  .ig-result{margin-top:14px;padding:12px 13px;border-radius:12px;background:#f7f8fb;
+    border:1px solid var(--line);font-size:13px;color:#374151;line-height:1.6}
+  .ig-result b{display:block;font-size:14px;margin-bottom:4px;color:var(--ink)}
+  .ig-result.bad{background:#fff8f8;border-color:#fbd5d5;color:#7f1d1d}
+  .ig-result.bad b{color:var(--danger)}
+  .ig-result.good{background:#f2fbf5;border-color:#cdeed8;color:#14532d}
+  .ig-result.good b{color:var(--ok)}
+  .ig-result a{display:inline-block;margin-top:9px;font-weight:700;color:#5b3ee6;text-decoration:none;
+    border:1.5px solid #d8d2ff;background:#fff;border-radius:10px;padding:9px 12px}
   /* 하단 선택 바 */
   .selbar{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 14px calc(10px + env(safe-area-inset-bottom));
     background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);
@@ -191,12 +201,53 @@
     <p class="hint">한 번에 12개씩만 보여 드리고, 더 필요할 때만 추가로 불러옵니다.
       인스타그램을 배려해 요청 사이에 1.5~3초씩 쉬어 갑니다.</p>
     <div class="state">
-      <span class="dot {{ 'on' if status.configured else '' }}"></span>
+      <span class="dot {{ 'on' if status.configured else '' }}" id="session-dot"></span>
       <span id="session-line">
-        {% if status.configured %}로그인 세션 사용 중 ({{ status.source }}{% if status.username %} · @{{ status.username }}{% endif %})
-        {% else %}로그인 없이 시도합니다 · 막히면 아래 ‘로그인 세션’을 설정하세요{% endif %}
+        {% if status.configured %}로그인됨 ({{ status.source }}{% if status.username %} · @{{ status.username }}{% endif %})
+        {% else %}로그인 전입니다 · 막히면 아래에서 한 번만 로그인하세요{% endif %}
       </span>
     </div>
+  </section>
+
+  <!-- 1-1. 인스타그램 로그인 -->
+  <section class="card" id="login-card">
+    <details id="login-details"{% if not status.configured %} open{% endif %}>
+      <summary id="login-summary">인스타그램 로그인 (한 번만 하면 계속 사용)</summary>
+      <div class="body">
+        <p style="margin:0 0 12px">내 인스타그램 계정으로 로그인해 두면, 이 앱이 그 계정으로 사진을 봅니다.
+          <b>비밀번호는 서버에 저장하지 않습니다.</b></p>
+
+        <label class="blk" for="ig-user">인스타그램 아이디</label>
+        <div class="field">
+          <span class="at">@</span>
+          <input id="ig-user" type="text" autocomplete="username" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" placeholder="예: coupang1stsis"
+                 value="{{ status.username or '' }}">
+        </div>
+
+        <label class="blk" for="ig-pass">비밀번호</label>
+        <div class="field">
+          <input id="ig-pass" type="password" autocomplete="current-password"
+                 placeholder="인스타그램 비밀번호" style="padding-left:14px">
+        </div>
+
+        <button class="primary" id="ig-login" type="button">로그인</button>
+
+        <div id="ig-code-box" class="hidden" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+          <label class="blk" for="ig-code">인증 코드</label>
+          <div class="field">
+            <input id="ig-code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                   placeholder="문자·메일에 온 코드" style="padding-left:14px">
+          </div>
+          <button class="primary" id="ig-code-btn" type="button">코드 확인</button>
+        </div>
+
+        <div id="ig-result" class="ig-result hidden"></div>
+        <p class="hint" style="color:var(--warn)">· 폰에서 처음 로그인하면 인스타그램이 본인 확인 코드를 요구할 수 있습니다.
+          그때는 문자·메일에 온 코드를 위 칸에 넣으면 됩니다.<br>
+          · 로그인 상태는 서버가 기억하고, 서버가 재시작되면 한 번 다시 해 주시면 됩니다.</p>
+      </div>
+    </details>
   </section>
 
   <!-- 2. 목록 -->
@@ -265,12 +316,12 @@
     </div>
   </section>
 
-  <!-- 7. 로그인 세션 -->
+  <!-- 7. 고급: 세션 값 직접 넣기 -->
   <section class="card" id="session-card">
     <details id="session-details">
-      <summary>인스타그램 로그인 세션 (막힐 때 한 번만 설정)</summary>
+      <summary>고급 · 세션 값(sessionid)으로 연결</summary>
       <div class="body">
-        <p style="margin:0 0 10px">요즘 인스타그램은 로그인 없이 보는 길을 거의 막아 둡니다.
+        <p style="margin:0 0 10px">아이디·비밀번호 로그인이 인스타그램에서 막힐 때만 쓰는 예비 방법입니다.
           <b>내 인스타그램 계정</b>으로 로그인한 브라우저에서 sessionid를 복사해 넣으면,
           이 앱이 그 세션으로 사진을 봅니다.</p>
         <p style="margin:0 0 6px"><b>sessionid 복사하는 방법 (PC 브라우저)</b></p>
@@ -727,16 +778,122 @@
   }
 
   $("err-login").addEventListener("click", function () {
-    $("session-details").open = true;
-    $("session-card").scrollIntoView({ behavior: "smooth", block: "center" });
-    $("cookie").focus();
+    $("login-details").open = true;
+    $("login-card").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("ig-pass").focus();
+  });
+
+  /* ---------------- 아이디·비밀번호 로그인 ---------------- */
+  var IG = { flow: null, busy: false };
+
+  function igShow(kind, title, msg, hint, link) {
+    var box = $("ig-result");
+    box.className = "ig-result" + (kind ? " " + kind : "");
+    box.innerHTML = "";
+    if (title) { var b = document.createElement("b"); b.textContent = title; box.appendChild(b); }
+    if (msg) box.appendChild(document.createTextNode(msg));
+    if (hint) {
+      var p = document.createElement("div");
+      p.style.marginTop = "6px";
+      p.textContent = hint;
+      box.appendChild(p);
+    }
+    if (link) {
+      var a = document.createElement("a");
+      a.href = link; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "본인 확인 페이지 열기";
+      box.appendChild(a);
+    }
+  }
+
+  function igDone(d) {
+    IG.flow = null;
+    hide($("ig-code-box"));
+    $("ig-code").value = "";
+    igShow("good", "✅ @" + d.username + " 로그인되었습니다",
+           "이제 위에 보고 싶은 아이디를 넣고 [사진 목록 불러오기]를 누르세요.");
+    if (d.status) paintSession(d.status);
+    $("login-details").open = false;
+    $("login-summary").textContent = "✅ @" + d.username + " 로그인됨 · 다시 로그인하려면 누르세요";
+    $("login-card").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  $("ig-login").addEventListener("click", function () {
+    if (IG.busy) return;
+    var user = ($("ig-user").value || "").trim().replace(/^@+/, "");
+    var pass = $("ig-pass").value || "";
+    if (!user) { igShow("bad", "인스타그램 아이디를 넣어 주세요", ""); $("ig-user").focus(); return; }
+    if (!pass) { igShow("bad", "비밀번호를 넣어 주세요", ""); $("ig-pass").focus(); return; }
+    IG.busy = true;
+    $("ig-login").disabled = true;
+    $("ig-login").textContent = "로그인하는 중…";
+    igShow("", "인스타그램에 로그인하는 중입니다", "몇 초 걸립니다. 창을 닫지 마세요.");
+    fetch("/api/session/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: user, password: pass })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      IG.busy = false;
+      $("ig-login").disabled = false;
+      $("ig-login").textContent = "로그인";
+      $("ig-pass").value = "";              /* 화면에도 비밀번호를 남기지 않습니다 */
+      if (d.ok && d.logged_in) { igDone(d); return; }
+      if (d.ok && d.need_code) {
+        IG.flow = d.flow_id;
+        show($("ig-code-box"));
+        igShow("", d.title || "인증 코드를 넣어 주세요", d.message || "", d.hint || "");
+        $("ig-code").focus();
+        return;
+      }
+      hide($("ig-code-box"));
+      igShow("bad", d.title || "로그인하지 못했습니다", d.error || "", d.hint || "", d.checkpoint || "");
+    }).catch(function () {
+      IG.busy = false;
+      $("ig-login").disabled = false;
+      $("ig-login").textContent = "로그인";
+      igShow("bad", "서버에 연결하지 못했습니다", "잠시 뒤 다시 시도해 주세요.");
+    });
+  });
+
+  $("ig-pass").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") $("ig-login").click();
+  });
+
+  $("ig-code-btn").addEventListener("click", function () {
+    if (IG.busy || !IG.flow) return;
+    var code = ($("ig-code").value || "").replace(/\s+/g, "");
+    if (!code) { igShow("bad", "인증 코드를 넣어 주세요", ""); $("ig-code").focus(); return; }
+    IG.busy = true;
+    $("ig-code-btn").disabled = true;
+    $("ig-code-btn").textContent = "확인하는 중…";
+    fetch("/api/session/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flow_id: IG.flow, code: code })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      IG.busy = false;
+      $("ig-code-btn").disabled = false;
+      $("ig-code-btn").textContent = "코드 확인";
+      if (d.ok && d.logged_in) { igDone(d); return; }
+      if (d.need_code && d.flow_id) { IG.flow = d.flow_id; }
+      igShow("bad", d.title || "코드를 확인하지 못했습니다", d.error || "", d.hint || "");
+    }).catch(function () {
+      IG.busy = false;
+      $("ig-code-btn").disabled = false;
+      $("ig-code-btn").textContent = "코드 확인";
+      igShow("bad", "서버에 연결하지 못했습니다", "잠시 뒤 다시 시도해 주세요.");
+    });
+  });
+
+  $("ig-code").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") $("ig-code-btn").click();
   });
 
   /* ---------------- 세션 ---------------- */
   function paintSession(status) {
     $("session-line").textContent = status.configured
-      ? "로그인 세션 사용 중 (" + status.source + (status.username ? " · @" + status.username : "") + ")"
-      : "로그인 없이 시도합니다 · 막히면 아래 ‘로그인 세션’을 설정하세요";
+      ? "로그인됨 (" + status.source + (status.username ? " · @" + status.username : "") + ")"
+      : "로그인 전입니다 · 아래에서 한 번만 로그인하세요";
+    var dot = $("session-dot");
+    if (dot) dot.classList.toggle("on", !!status.configured);
   }
 
   $("save-session").addEventListener("click", function () {
