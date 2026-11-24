@@ -316,51 +316,6 @@
     </div>
   </section>
 
-  <!-- 7. 고급: 세션 값 직접 넣기 -->
-  <section class="card" id="session-card">
-    <details id="session-details">
-      <summary>고급 · 세션 값(sessionid)으로 연결</summary>
-      <div class="body">
-        <p style="margin:0 0 10px">아이디·비밀번호 로그인이 인스타그램에서 막힐 때만 쓰는 예비 방법입니다.
-          <b>내 인스타그램 계정</b>으로 로그인한 브라우저에서 sessionid를 복사해 넣으면,
-          이 앱이 그 세션으로 사진을 봅니다.</p>
-        <p style="margin:0 0 6px"><b>sessionid 복사하는 방법 (PC 브라우저)</b></p>
-        <ol style="margin:0 0 10px;padding-left:20px">
-          <li>크롬에서 인스타그램에 로그인합니다.</li>
-          <li><code class="inline">F12</code> 를 누르고 위쪽 <b>Application</b> 탭 → 왼쪽 <b>Cookies</b> → <b>https://www.instagram.com</b></li>
-          <li>목록에서 <b>sessionid</b> 를 찾아 값을 복사합니다. (30자 이상)</li>
-          <li>아래 칸에 붙여넣고 [저장하고 확인]을 누릅니다.</li>
-        </ol>
-        <p style="margin:0 0 10px">휴대폰 사파리·크롬에서는 개발자 도구가 없어서, PC에서 복사하는 것이 가장 쉽습니다.</p>
-        <textarea id="cookie" placeholder="sessionid=...; csrftoken=...  (sessionid 값만 붙여넣어도 됩니다)"></textarea>
-        <div class="row" style="margin-top:10px">
-          <button class="ghost grow" id="save-session" type="button">저장하고 확인</button>
-          <button class="ghost" id="clear-session" type="button">지우기</button>
-        </div>
-        <p class="hint" id="session-result"></p>
-        <p class="hint" style="color:var(--warn)">· 내 계정으로 요청하므로 계정이 일시 제한될 위험이 조금 커집니다.
-          정말 필요할 때만 쓰고, 세션 값은 절대 남에게 보내지 마세요.<br>
-          · 이 앱은 세션 값을 서버 메모리에만 두고 화면에는 끝 4자리만 보여 줍니다.
-          (클라우드에서는 서비스가 재시작되면 다시 넣어야 합니다)</p>
-      </div>
-    </details>
-  </section>
-
-  <!-- 8. 안내 -->
-  <section class="card">
-    <details>
-      <summary>이렇게 쓰세요 · 집 와이파이 / 클라우드 링크</summary>
-      <div class="body">
-        <p style="margin:0 0 8px"><b>집 PC에서</b> : <code class="inline">실행하기.bat</code> 더블클릭 → 검은 창에 나온
-          <code class="inline">http://192.168.x.x:5000</code> 주소로 폰에서 접속. 같은 와이파이여야 합니다.</p>
-        <p style="margin:0 0 8px"><b>클라우드(Render)에서</b> : 배포하면 나오는 <code class="inline">https://....onrender.com</code>
-          주소를 와이프분께 보내면, 어디서든 접속됩니다. 자세한 방법은 <code class="inline">사용설명서.txt</code> 참고.</p>
-        <p style="margin:0"><b>받은 사진</b> : 서버(PC)의 <code class="inline">downloads\아이디\</code> 폴더에 저장되고,
-          다운로드 이력은 <code class="inline">data\history.json</code> 에 남습니다.
-          같은 사진은 ‘다운 완료’로 표시되고 다시 받지 않습니다.</p>
-      </div>
-    </details>
-  </section>
 </main>
 
 <!-- 하단 선택 바 -->
@@ -903,38 +858,6 @@
     var dot = $("session-dot");
     if (dot) dot.classList.toggle("on", !!status.configured);
   }
-
-  $("save-session").addEventListener("click", function () {
-    var val = ($("cookie").value || "").trim();
-    if (!val) { $("session-result").textContent = "sessionid 값을 붙여넣어 주세요."; return; }
-    $("save-session").disabled = true;
-    $("session-result").textContent = "확인하는 중… (최대 10초)";
-    fetch("/api/session", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cookie: val })
-    }).then(function (r) { return r.json(); }).then(function (d) {
-      $("save-session").disabled = false;
-      if (!d.ok) {
-        $("session-result").textContent = "저장하지 못했습니다: " + (d.error || "");
-        return;
-      }
-      $("cookie").value = "";
-      paintSession(d.status);
-      $("session-result").textContent = d.verified
-        ? "✅ @" + d.username + " 계정으로 연결되었습니다. 이제 목록을 다시 불러와 보세요."
-        : "저장했습니다만 확인이 되지 않았습니다. " + (d.error || "쿠키를 다시 확인해 주세요.");
-    }).catch(function () {
-      $("save-session").disabled = false;
-      $("session-result").textContent = "서버에 연결하지 못했습니다.";
-    });
-  });
-
-  $("clear-session").addEventListener("click", function () {
-    fetch("/api/session/clear", { method: "POST" }).then(function (r) { return r.json(); }).then(function (d) {
-      paintSession(d.status);
-      $("session-result").textContent = "세션을 지웠습니다.";
-    });
-  });
 
   /* ---------------- 계정 목록 ---------------- */
   function loadAccounts() {
