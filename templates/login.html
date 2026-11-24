@@ -27,7 +27,7 @@
   <form class="card" method="post">
     <h1>접속 암호</h1>
     <p>이 다운로더는 정해진 사람만 쓸 수 있도록 암호를 걸어 두었습니다. 암호를 입력해 주세요.</p>
-    <input type="password" name="code" inputmode="numeric" autocomplete="current-password" autofocus placeholder="암호">
+    <input type="password" name="code" autocomplete="current-password" autofocus placeholder="암호">
     <button type="submit">들어가기</button>
     {% if error %}<div class="err">{{ error }}</div>{% endif %}
   </form>
